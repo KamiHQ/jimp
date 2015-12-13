@@ -12,7 +12,7 @@ Head over to http://strandedcity.github.io/jimp/browser/
 
 Select images, or just click to use images from the /test directory. Your images will be loaded by the browser, and each will be thumbailed and greyscaled, two of Jimp's simplest and most useful operations. Each image will be correctly oriented according to its exif data and displayed in two ways, with different implications for web applications:
 
-```
+```js
 var canvas = document.createElement("canvas");
 canvas.width = image.width;
 canvas.height = image.height;
@@ -28,7 +28,7 @@ ctx.putImageData(imgData,0,0);
 
 and
 
-```
+```html
 <img src="[data URI]" width="xx" height="xx" />
 ```
 
@@ -41,15 +41,18 @@ These files are meant to be customized for your your use:
 - index.html
 
 Generally, you should expect to create the worker in index.html:
-```
+```js
 var worker = new Worker("jimp-worker.js");
 ```
 and send it data in one of these ways:
-```
+
+##### Input Type 1: Send url to be read in worker via xhr: #####
+```js
 worker.postMessage("/some/local/path/to/image.jpg");
 ```
-or
-```
+
+##### Input Type 2: Pass an ArrayBuffer to be read in directly: #####
+```js
 var element = document.getElementById("fileSelectionElement"),
 file = element.files[0],
 fr = new FileReader();
@@ -66,8 +69,8 @@ Demo code in jimp-worker.js will take care of reading the image data such that a
 
 In a node.js context, Jimp writes to files. In a browser context, this is less useful. Follow the example to see how to retrieve your processed images from jimp-worker.js once they are available. In a nutshell, you'll receive post messages back from the worker with two types of data that are easy to display in the browser, upload, etc:
 
-Output as an Image Object for display on ```<canvas>```:
-```
+##### Output Type 1: As an Image Object for display on ```<canvas>```:#####
+```js
 worker.onmessage = function(e){
     var returnObject = e.data;
 
@@ -95,8 +98,8 @@ worker.onmessage = function(e){
 };
 ```
 
-Output as a Data URI for display in ```<img>```:
-```
+##### Output Type 2: As a Data URI for display in ```<img>```:#####
+```js
 worker.onmessage = function(e){
     var returnObject = e.data;
 
@@ -118,7 +121,7 @@ worker.onmessage = function(e){
 ## Image Manipulation ##
 
 In jimp-worker.js, you can change which image manipulations occur by changing this fuction:
-```
+```js
 function processImageData(image){
     // Do some image processing in Jimp. This is why we want to use a Web Worker!
     image.containCropped(200, 200)            // resize thumbnail
