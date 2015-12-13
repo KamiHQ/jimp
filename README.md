@@ -1,70 +1,135 @@
-# Jimp #
+# Jimp ... for Web Workers #
 
-The "JavaScript Image Manipulation Program" :-)
+The "JavaScript Image Manipulation Program" ... for Web Workers! :-)
 
-An image processing library for Node written entirely in JavaScript, with zero external or native dependencies. Also available for use in the browser for image manipulation in web workers without ```<canvas>```
+A fork of the wonderful Jimp by oliver-moran (https://github.com/oliver-moran/jimp). Jimp runs in node, Jimp for the browser runs in a Web Worker.
 
-Example usage:
+This version of the library lets you do fully multi-threaded image manipulation in a browser context without using ```<canvas>```. Its API is essentially the same as Jimp's, so be sure to browse the documentation there. It's generally compatible with Firefox 11+, Chrome, Safari 6+, and IE 11+. It is compatible with BMP, JPG, and PNG files (as is Jimp). The full-featured version, which does everything Jimp does, is 90kb gzipped. Much smaller versions can be built easily by excluding features and dependencies from the library. See index.js.
 
-```js
-var Jimp = require("jimp");
+## Demo ##
 
-// open a file called "lenna.png"
-Jimp.read("lenna.png", function (err, lenna) {
-    if (err) throw err;
-    lenna.resize(256, 256)            // resize
-         .quality(60)                 // set JPEG quality
-         .greyscale()                 // set greyscale
-         .write("lena-small-bw.jpg"); // save
-});
+Head over to http://strandedcity.github.io/jimp/browser/
+
+Select images, or just click to use images from the /test directory. Your images will be loaded by the browser, and each will be thumbailed and greyscaled, two of Jimp's simplest and most useful operations. Each image will be correctly oriented according to its exif data and displayed in two ways, with different implications for web applications:
+
+```
+var canvas = document.createElement("canvas");
+canvas.width = image.width;
+canvas.height = image.height;
+document.body.appendChild(canvas);
+
+var ctx = canvas.getContext("2d");
+var imgData = ctx.createImageData(image.width,image.height);
+
+...
+
+ctx.putImageData(imgData,0,0);
 ```
 
-Using promises:
+and
 
-```js
-Jimp.read("lenna.png").then(function (lenna) {
-    lenna.resize(256, 256)            // resize
-         .quality(60)                 // set JPEG quality
-         .greyscale()                 // set greyscale
-         .write("lena-small-bw.jpg"); // save
-}).catch(function (err) {
-    console.error(err);
-});
+```
+<img src="[data URI]" width="xx" height="xx" />
 ```
 
+## Basic Usage: Input ##
 
-## Basic usage ##
+As much work as possible should be done on the worker thread, but since Web Workers cannot interact with the DOM there are some divisions of labor that must take place.
 
-The static `Jimp.read` method takes the path to a PNG, JPEG or BMP file and (optionally) a Node-style callback and returns a Promise:
+These files are meant to be customized for your your use:
+- jimp-worker.js
+- index.html
 
-```js
-Jimp.read("./path/to/image.jpg", function (err, image) {
-    // do stuff with the image (if no exception)
+Generally, you should expect to create the worker in index.html:
+```
+var worker = new Worker("jimp-worker.js");
+```
+and send it data in one of these ways:
+```
+worker.postMessage("/some/local/path/to/image.jpg");
+```
+or
+```
+var element = document.getElementById("fileSelectionElement"),
+file = element.files[0],
+fr = new FileReader();
+
+fr.addEventListener("load",function(){
+    worker.postMessage(this.result);
 });
-
-Jimp.read("./path/to/image.jpg").then(function (image) {
-    // do stuff with the image
-}).catch(function (err) {
-    // handle an exception
-});
+fr.readAsArrayBuffer(readfile);
 ```
 
-The method can also read a PNG, JPEG or BMP buffer or from a URL:
+Demo code in jimp-worker.js will take care of reading the image data such that a Jimp object can be created.
 
+## Basic Usage: Output ##
 
-```js
-Jimp.read(lenna.buffer, function (err, image) {
-    // do stuff with the image (if no exception)
-});
+In a node.js context, Jimp writes to files. In a browser context, this is less useful. Follow the example to see how to retrieve your processed images from jimp-worker.js once they are available. In a nutshell, you'll receive post messages back from the worker with two types of data that are easy to display in the browser, upload, etc:
 
-Jimp.read("http://www.example.com/path/to/lenna.jpg", function (err, image) {
-    // do stuff with the image (if no exception)
-});
+Output as an Image Object for display on ```<canvas>```:
+```
+worker.onmessage = function(e){
+    var returnObject = e.data;
+
+    if (returnObject.type === "IMAGE") {
+        // display the processed image by drawing in a canvas:
+        var image = returnObject.data;
+        var canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        document.body.appendChild(canvas);
+
+        var ctx = canvas.getContext("2d");
+        var imgData = ctx.createImageData(image.width,image.height);
+
+        var ubuf = image.data;
+        for (var i=0;i < ubuf.length; i+=4) {
+            imgData.data[i]   = ubuf[i];   //red
+            imgData.data[i+1] = ubuf[i+1]; //green
+            imgData.data[i+2] = ubuf[i+2]; //blue
+            imgData.data[i+3] = ubuf[i+3]; //alpha
+        }
+
+        ctx.putImageData(imgData,0,0);
+    }
+};
+```
+
+Output as a Data URI for display in ```<img>```:
+```
+worker.onmessage = function(e){
+    var returnObject = e.data;
+
+    if (returnObject.type === "DATA_URI") {
+        // display processed image by data URI:
+        var dataUri = returnObject.data;
+        var width = returnObject.width;
+        var height = returnObject.height;
+
+        var image = document.createElement("img");
+        image.src = dataUri;
+        image.width = w;
+        image.height = h;
+        document.body.appendChild(image);
+    }
+};
+```
+
+## Image Manipulation ##
+
+In jimp-worker.js, you can change which image manipulations occur by changing this fuction:
+```
+function processImageData(image){
+    // Do some image processing in Jimp. This is why we want to use a Web Worker!
+    image.containCropped(200, 200)            // resize thumbnail
+        .quality(60)                          // set JPEG quality
+        .greyscale();                         // set greyscale
+}
 ```
 
 JPEG images with EXIF orientation data will be automatically re-orientated as appropriate.
 
-Once the callback is filed or the promise fulfilled, the following methods can be called on the image:
+The following methods can be called on the image:
 
 ```js
 image.crop( x, y, w, h );      // crop to the given region
@@ -98,36 +163,6 @@ image.clone();                 // returns a clone of the image
 
 (Contributions of more methods are welcome!)
 
-## Usage in a Browser Context ##
-
-See Readme in the fork at https://github.com/strandedcity/jimp for documentation of code examples in the /browser path. The API is unchanged from above, but there are differences in how Jimp can be used.
-
-## Writing to files and buffers ##
-
-### Writing to files ###
-
-The image can be written to disk in PNG, JPEG or BMP format (determined by the file extension) using:
-
-```js
-image.write( path, cb ); // Node-style callback will be fired when write is successful
-```
-
-### Writing to Buffers ###
-
-A PNG, JPEG or BMP binary Buffer of an image (e.g. for storage in a database) can to got using:
-
-```js
-image.getBuffer( mime, cb ); // Node-style callback wil be fired with result
-```
-
-For convenience, supported MIME types are available as static properties:
-
-```js
-Jimp.MIME_PNG;  // "image/png"
-Jimp.MIME_JPEG; // "image/jpeg"
-Jimp.BMP;       // "image/bmp"
-```
-
 ### PNG and JPEG quality ###
 
 The quality of JPEGs can be set with:
@@ -155,174 +190,20 @@ Jimp.PNG_FILTER_AVERAGE; //  3
 Jimp.PNG_FILTER_PAETH;   //  4
 ```
 
+## Compiling jimp.min.js ##
+
+Run the bash script ```/browser/browserify-build.sh```. You'll need a few tools set up to compile the script.
+
+```
+npm install -g browserify
+npm install -g uglify-js
+npm install envify
+npm install uglifyify
+```
+
 ## Advanced usage ##
 
-### Colour manipulation ##
-
-Jimp supports advanced colour manipulation using a single method as follows:
-
-```js
-image.color([
-    { apply: 'hue', params: [ -90 ] },
-    { apply: 'lighten', params: [ 50 ] },
-    { apply: 'xor', params: [ '#06D' ] }
-]);
-```
-
-The method supports the following modifiers:
-
-Modifier                | Description
------------------------ | -----------------------
-**lighten** {amount}    | Lighten the color a given amount, from 0 to 100. Providing 100 will always return white (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**brighten** {amount}   | Brighten the color a given amount, from 0 to 100 (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**darken** {amount}     | Darken the color a given amount, from 0 to 100. Providing 100 will always return black (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**desaturate** {amount} | Desaturate the color a given amount, from 0 to 100. Providing 100 will is the same as calling greyscale (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**saturate** {amount}   | Saturate the color a given amount, from 0 to 100 (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**greyscale** {amount}  | Completely desaturates a color into greyscale (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**spin** {degree}       | Spin the hue a given amount, from -360 to 360. Calling with 0, 360, or -360 will do nothing - since it sets the hue back to what it was before. (works through [TinyColor](https://github.com/bgrins/TinyColor))
-**hue** {degree}        | Alias for **spin**
-**mix** {color, amount} | Mixes colors by their RGB component values. Amount is opacity of overlaying color
-**tint** {amount}       | Same as applying **mix** with white color
-**shade** {amount}      | Same as applying **mix** with black color
-**xor** {color}         | Treats the two colors as bitfields and applies an XOR operation to the red, green, and blue components
-**red** {amount}        | Modify Red component by a given amount
-**green** {amount}      | Modify Green component by a given amount
-**blue** {amount}       | Modify Blue component by a given amount
-
-### Low-level manipulation ###
-
-Jimp enables low-level manipulation of images in memory through the bitmap property of each Jimp object:
-
-```js
-image.bitmap.data; // a Buffer of the raw bitmap data
-image.bitmap.width; // the width of the image
-image.bitmap.height // the height of the image
-```
-
-This data can be manipulated directly but remember: garbage in, garbage out.
-
-A helper method is available to scan a region of the bitmap:
-
-```js
-image.scan(x, y, w, h, cb); // scan a given region of the bitmap and call cb on every pixel
-```
-
-Example usage:
-
-```js
-image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {
-    // x, y is the position of this pixel on the image
-    // idx is the position start position of this rgba tuple in the bitmap Buffer
-    // this is the image
-
-    var red   = this.bitmap.data[ idx + 0 ];
-    var green = this.bitmap.data[ idx + 1 ];
-    var blue  = this.bitmap.data[ idx + 2 ];
-    var alpha = this.bitmap.data[ idx + 3 ];
-
-    // rgba values run from 0 - 255
-    // e.g. this.bitmap.data[idx] = 0; // removes red from this pixel
-});
-```
-
-Alternatively, you can manipulate individual pixels using the following these functions:
-
-```js
-image.getPixelColor(x, y); // returns the colour of that pixel e.g. 0xFFFFFFFF
-image.setPixelColor(hex, x, y); // sets the colour of that pixel
-```
-
-Two static helper functions exist to convert RGBA values into single integer (hex) values:
-
-```js
-Jimp.rgbaToInt(r, g, b, a); // e.g. converts 255, 255, 255, 255 to 0xFFFFFFFF
-Jimp.intToRGBA(hex); // e.g. converts 0xFFFFFFFF to {r: 255, g: 255, b: 255, a:255}
-```
-
-### Creating new images ###
-
-If you want to begin with an empty Jimp image, you can call the Jimp constructor passing the width and height of the image to create and (optionally) a Node-style callback:
-
-```js
-var image = new Jimp(256, 256, function (err, image) {
-    // this image is 256 x 256, every pixel is set to 0x00000000
-});
-```
-
-You can optionally set the pixel colour as follows:
-
-```js
-var image = new Jimp(256, 256, 0xFF0000FF, function (err, image) {
-    // this image is 256 x 256, every pixel is set to 0xFF0000FF
-});
-```
-
-## Comparing images ##
-
-To generate a [perceptual hash](https://en.wikipedia.org/wiki/Perceptual_hashing) of a Jimp image, based on the [pHash](http://phash.org/) algorithm, use:
-
-```js
-image.hash(); // aHgG4GgoFjA
-```
-
-By default the hash is returned as base 64. The hash can be returned at another base by passing a number from 2 to 64 to the method:
-
-```js
-image.hash(2); // 1010101011010000101010000100101010010000011001001001010011100100
-```
-
-There are 18,446,744,073,709,551,615 unique hashes. The hammering distance between the binary representation of these hashes can be used to find similar-looking images.
-
-To calculate the hammering distance between two Jimp images based on their perceptual hash use:
-
-```js
-Jimp.distance(image1, image2); // returns a number 0-1, where 0 means the two images are perceived to be identical
-```
-
-Jimp also allows the diffing of two Jimp images using [PixelMatch](https://github.com/mapbox/pixelmatch) as follows:
-
-```js
-var diff = Jimp.diff(image1, image2, threshold); // threshold ranges 0-1 (default: 0.1)
-diff.image;   // a Jimp image showing differences
-diff.percent; // the proportion of different pixels (0-1), where 0 means the images are pixel identical
-```
-
-Using a mix of hammering distance and pixel diffing to comare images, the following code has a 99% success rate of detecting the same image from a random sample (with 1% false positives). The test this figure is drawn from attempts to match each image from a sample of 120 PNGs against 120 corresponing JPEGs saved at a quality setting of 60.
-
-```js
-var distance = Jimp.distance(png, jpeg); // perceived distance
-var diff = Jimp.diff(png, jpeg);         // pixel difference
-
-if (distance < 0.15 || diff.percent < 0.15) {
-    // images match
-} else {
-    // not a match
-}
-```
-
-## Chaining or callbacks ##
-
-Most instance methods can be chained together, for example as follows:
-
-```js
-Jimp.read("lenna.png", function (err, image) {
-    this.greyscale().scale(0.5).write("lena-half-bw.png");
-});
-```
-
-Alternatively, methods can be passed Node-style callbacks:
-
-```js
-Jimp.read("lenna.png", function (err, image) {
-    image.greyscale(function(err, image) {
-        image.scale(0.5, function (err, image) {
-            image.write("lena-half-bw.png");
-        });
-    });
-});
-```
-
-The Node-style callback pattern allows Jimp to be used with frameworks that expect or build on the Node-style callback pattern.
+See the origin fork at https://github.com/oliver-moran/jimp for full documentation of Jimp.
 
 ## License ##
 
