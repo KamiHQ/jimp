@@ -120,14 +120,21 @@ worker.onmessage = function(e){
 
 ## Image Manipulation ##
 
-In jimp-worker.js, you can change which image manipulations occur by changing this fuction:
+In jimp-worker.js, syntax for Jimp works the same as it does in node (see https://github.com/oliver-moran/jimp). Inside self.onmessage:
 ```js
-function processImageData(image){
-    // Do some image processing in Jimp. This is why we want to use a Web Worker!
-    image.containCropped(200, 200)            // resize thumbnail
-        .quality(60)                          // set JPEG quality
-        .greyscale();                         // set greyscale
-}
+    Jimp.read(e.data).then(function(image){
+        image.containCropped(200, 200)  // fit the image in a 200px square
+            .greyscale()                // make it B&W
+            .quality(60);               // set JPEG quality (only applies to jpegs)
+
+        // Return resized image data to the main thread:
+        self.postMessage({
+            type: "IMAGE",
+            data: image.bitmap,
+            width: image.bitmap.width,
+            height: image.bitmap.height
+        });
+    });
 ```
 
 JPEG images with EXIF orientation data will be automatically re-orientated as appropriate.
@@ -193,15 +200,24 @@ Jimp.PNG_FILTER_AVERAGE; //  3
 Jimp.PNG_FILTER_PAETH;   //  4
 ```
 
-## Compiling jimp.min.js ##
+## Compiling jimp.js and jimp.min.js ##
 
-Run the bash script ```/browser/browserify-build.sh```. You'll need a few tools set up to compile the script.
+Clone the repo and run ```$ npm install``
+
+To rebuild the minified JavaScript files jimp.js and jimp.min.js, run ```$ npm run prepublish``` at any time.
 
 ```
-npm install -g browserify
-npm install -g uglify-js
-npm install envify
-npm install uglifyify
+$ npm install
+
+> jimp@0.2.20 prepublish /home/<location>/jimp
+> ./browser/browserify-build.sh
+
+Browserifying browser/jimp.js...
+Translating for ES5...
+Removing Strict Mode.
+Adding Web Worker wrapper functions...
+Minifying browser/jimp.min.js...
+Cleaning up....
 ```
 
 ## Advanced usage ##
