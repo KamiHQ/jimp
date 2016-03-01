@@ -807,13 +807,11 @@ Jimp.prototype.autocrop = function (cb) {
 
     // crop image, if at least one side should be cropped
     if (
-        westPixelsToCrop !== 0 ||
-        northPixelsToCrop !== 0 ||
         widthOfPixelsToCrop !== w ||
         heightOfPixelsToCrop !== h
     ) {
         this.crop(
-            westPixelsToCrop,
+            eastPixelsToCrop,
             northPixelsToCrop,
             widthOfPixelsToCrop,
             heightOfPixelsToCrop
