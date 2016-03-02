@@ -8,9 +8,8 @@ cd ${0%/*}
 export PATH=$(npm bin):$PATH
 echo "Browserifying browser/jimp.js..."
 ENVIRONMENT=BROWSER \
-browserify -t envify -t uglifyify ../index.js > tmp1.js
+browserify -t envify -t [ babelify --presets es2015 ] ../index.js > tmp.js
 echo "Translating for ES5..."
-babel tmp1.js -o tmp.js --presets es2015,stage-0
 
 
 # A TRUE hack. Use strict at the top seems to cause problems for ie10 interpreting this line from bmp-js:
@@ -18,7 +17,7 @@ babel tmp1.js -o tmp.js --presets es2015,stage-0
 # module.exports = decode = function(bmpData) { ...
 # For some reason, babeljs misses this "error" but IE can parse the code fine without strict mode.
 echo "Removing Strict Mode."
-sed "s/^\"use strict\";\|ret=Z_BUF_ERROR;//" tmp.js > tmp-nostrict.js
+sed "s/^\"use strict\";//; s/ret = Z_BUF_ERROR;//" tmp.js > tmp-nostrict.js
 
 echo "Adding Web Worker wrapper functions..."
 cat tmp-nostrict.js src/jimp-wrapper.js > tmp.jimp.js
