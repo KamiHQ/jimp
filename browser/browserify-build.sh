@@ -5,6 +5,7 @@
 # eg: I/O, Affine Transforms, Bitmap Operations, Gamma Curves, and Layers
 # Initial Build includes everything except file IO, which is browser-incompatible
 cd ${0%/*}
+export PATH=$(npm bin):$PATH
 echo "Browserifying browser/jimp.js..."
 ENVIRONMENT=BROWSER \
 browserify -t envify -t uglifyify ../index.js > tmp1.js
